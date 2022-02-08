@@ -43,7 +43,8 @@ def create_app(test_config=None):
     @app.route('/categories', methods=['GET'])
     def get_categories():
         categories = Category.query.all()
-
+        if len(categories) == 0:
+            abort(404)
         return jsonify({
             'success': True,
             'categories': dict((category.id, category.type) for category in categories),
@@ -52,7 +53,10 @@ def create_app(test_config=None):
 
     @app.route('/categories/<int:category_id>', methods=['GET'])
     def get_categories_id(category_id):
+        categories = Category.query.all()
         category = Category.query.filter(Category.id == category_id).one_or_none()
+        if category is None:
+            abort(404)
         return jsonify({
             'success': True,
             'category': category.type
@@ -97,9 +101,11 @@ def create_app(test_config=None):
     @app.route('/questions/<int:question_id>',methods=['GET'])
     def get_question_id(question_id):
         question = Question.query.filter(Question.id == question_id).one_or_none()
+        if question is None:
+            abort(404)
         return jsonify({
         'success': True,
-        'id': question_id,
+        'id': question_id
         })
 
     @app.route('/questions/<int:question_id>',methods=['DELETE'])
@@ -136,7 +142,7 @@ def create_app(test_config=None):
         new_answer = body.get('answer',None)
         new_category = body.get('category',None)
         new_difficulty = body.get('difficulty',None)
-        search = body.get('search', None)
+        search = body.get('searchTerm', None)
         try:
             if search:
                 selection = Question.query.order_by(Question.id).filter(Question.question.ilike('%{}%'.format(search)))
@@ -207,22 +213,38 @@ def create_app(test_config=None):
     """
     @app.route('/quizzes', methods=['POST'])
     def get_quiz():
-        body = request.get_json()
-        quizCategory = body.get('quiz_category', None)['id']
-        previousQuestions = body.get('previous_questions', None)
-        if quizCategory == 'ALL':
-            new_question = dict(Question.query.filter(~Question.id.in_(previousQuestions)).order_by(func.random()).all()[0].format())
-        else:
-            new_question = dict(Question.query.filter(Question.category == quizCategory, ~Question.id.in_(previousQuestions)).order_by(func.random()).all()[0].format())
-        return jsonify({
-        'success': True,
-        'question': new_question,
-        'previousQuestions': previousQuestions
-        })
+        try:
+            body = request.get_json()
+            quizCategory = body.get('quiz_category', None)['id']
+            previousQuestions = body.get('previous_questions', None)
+            if quizCategory == 'ALL':
+                new_question = dict(Question.query.filter(~Question.id.in_(previousQuestions)).order_by(func.random()).all()[0].format())
+            else:
+                new_question = dict(Question.query.filter(Question.category == quizCategory, ~Question.id.in_(previousQuestions)).order_by(func.random()).all()[0].format())
+            return jsonify({
+            'success': True,
+            'question': new_question,
+            'previousQuestions': previousQuestions
+            })
+        except:
+            abort(422)
     """
     @TODO:
     Create error handlers for all expected errors
     including 404 and 422.
     """
+    @app.errorhandler(404)
+    def not_found(error):
+        return (
+            jsonify({"success": False, "error": 404, "message": "resource not found"}),
+            404,
+        )
+
+    @app.errorhandler(422)
+    def unprocessable(error):
+        return (
+            jsonify({"success": False, "error": 422, "message": "unprocessable"}),
+            422,
+        )
 
     return app
