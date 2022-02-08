@@ -3,31 +3,60 @@ from flask import Flask, request, abort, jsonify
 from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
 import random
-
 from models import setup_db, Question, Category
+from sqlalchemy import func
 
 QUESTIONS_PER_PAGE = 10
+
+def paginate_questions(request, selection):
+    page = request.args.get('page', 1, type=int)
+    start = (page - 1) * QUESTIONS_PER_PAGE
+    end = start + QUESTIONS_PER_PAGE
+    questions = [question.format() for question in selection]
+    current_questions = questions[start:end]
+    return current_questions
+
 
 def create_app(test_config=None):
     # create and configure the app
     app = Flask(__name__)
     setup_db(app)
+    CORS(app)
 
     """
     @TODO: Set up CORS. Allow '*' for origins. Delete the sample route after completing the TODOs
     """
-
+    cors = CORS(app, resources={r"/api/*": {"origins": "*"}})
     """
     @TODO: Use the after_request decorator to set Access-Control-Allow
     """
-
+    @app.after_request
+    def after_request(response):
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,true')
+        response.headers.add('Access-Control-Allow-Methods', 'GET,PATCH,POST,DELETE,OPTIONS')
+        return response
     """
     @TODO:
     Create an endpoint to handle GET requests
     for all available categories.
     """
+    @app.route('/categories', methods=['GET'])
+    def get_categories():
+        categories = Category.query.all()
 
+        return jsonify({
+            'success': True,
+            'categories': dict((category.id, category.type) for category in categories),
+            'total_categories': len(categories)
+            })
 
+    @app.route('/categories/<int:category_id>', methods=['GET'])
+    def get_categories_id(category_id):
+        category = Category.query.filter(Category.id == category_id).one_or_none()
+        return jsonify({
+            'success': True,
+            'category': category.type
+            })
     """
     @TODO:
     Create an endpoint to handle GET requests for questions,
@@ -41,6 +70,23 @@ def create_app(test_config=None):
     Clicking on the page numbers should update the questions.
     """
 
+    @app.route('/questions', methods=['GET'])
+    def get_questions():
+        selection = Question.query.order_by(Question.id).all()
+        current_questions = paginate_questions(request, selection)
+        categories = Category.query.all()
+        current_categories_id = [question.category for question in selection]
+        current_categories_type = Category.query.filter(Category.id.in_(current_categories_id)).all()
+        if len(current_questions) == 0:
+            abort(404)
+        return jsonify({
+            'success': True,
+            'questions': current_questions,
+            'total_questions': len(Question.query.all()),
+            'categories': dict((category.id, category.type) for category in categories),
+            'current_category': [category.type for category in current_categories_type]
+            })
+
     """
     @TODO:
     Create an endpoint to DELETE question using a question ID.
@@ -48,7 +94,31 @@ def create_app(test_config=None):
     TEST: When you click the trash icon next to a question, the question will be removed.
     This removal will persist in the database and when you refresh the page.
     """
+    @app.route('/questions/<int:question_id>',methods=['GET'])
+    def get_question_id(question_id):
+        question = Question.query.filter(Question.id == question_id).one_or_none()
+        return jsonify({
+        'success': True,
+        'id': question_id,
+        })
 
+    @app.route('/questions/<int:question_id>',methods=['DELETE'])
+    def delete_question(question_id):
+        try:
+            question = Question.query.filter(Question.id == question_id).one_or_none()
+            if question is None:
+                abort(404)
+            question.delete()
+            selection = Question.query.order_by(Question.id).all()
+            current_questions = paginate_questions(request, selection)
+            return jsonify({
+            'success': True,
+            'deleted': question_id,
+            'questions': current_questions,
+            'total_questions': len(Question.query.all())
+            })
+        except:
+            abort(422)
     """
     @TODO:
     Create an endpoint to POST a new question,
@@ -59,6 +129,37 @@ def create_app(test_config=None):
     the form will clear and the question will appear at the end of the last page
     of the questions list in the "List" tab.
     """
+    @app.route('/questions', methods=['POST'])
+    def create_question():
+        body = request.get_json()
+        new_question = body.get('question',None)
+        new_answer = body.get('answer',None)
+        new_category = body.get('category',None)
+        new_difficulty = body.get('difficulty',None)
+        search = body.get('search', None)
+        try:
+            if search:
+                selection = Question.query.order_by(Question.id).filter(Question.question.ilike('%{}%'.format(search)))
+                current_questions = paginate_questions(request, selection)
+                return jsonify({
+                'success': True,
+                'questions': current_questions,
+                'total_questions': len(current_questions),
+                'searchTerm': search
+                })
+            else:
+                question = Question(question=new_question, answer=new_answer, category=new_category, difficulty=new_difficulty)
+                question.insert()
+                selection = Question.query.order_by(Question.id).all()
+                current_questions = paginate_questions(request, selection)
+                return jsonify({
+                'success': True,
+                'created': question.id,
+                'questions': current_questions,
+                'total_questions': len(Question.query.all())
+                })
+        except:
+            abort(422)
 
     """
     @TODO:
@@ -70,7 +171,7 @@ def create_app(test_config=None):
     only question that include that string within their question.
     Try using the word "title" to start.
     """
-
+    #Added to create_question POST method above
     """
     @TODO:
     Create a GET endpoint to get questions based on category.
@@ -79,7 +180,20 @@ def create_app(test_config=None):
     categories in the left column will cause only questions of that
     category to be shown.
     """
-
+    @app.route('/categories/<int:category_id>/questions', methods=['GET'])
+    def get_questions_categories(category_id):
+        category = Category.query.filter(Category.id == category_id).one_or_none()
+        selection = Question.query.filter(Question.category == category.id).order_by(Question.id).all()
+        current_questions = paginate_questions(request, selection)
+        categories = Category.query.all()
+        if len(current_questions) == 0:
+            abort(404)
+        return jsonify({
+            'success': True,
+            'questions': current_questions,
+            'total_questions': len(Question.query.all()),
+            'current_category': category.type
+            })
     """
     @TODO:
     Create a POST endpoint to get questions to play the quiz.
@@ -91,7 +205,20 @@ def create_app(test_config=None):
     one question at a time is displayed, the user is allowed to answer
     and shown whether they were correct or not.
     """
-
+    @app.route('/quizzes', methods=['POST'])
+    def get_quiz():
+        body = request.get_json()
+        quizCategory = body.get('quiz_category', None)['id']
+        previousQuestions = body.get('previous_questions', None)
+        if quizCategory == 'ALL':
+            new_question = dict(Question.query.filter(~Question.id.in_(previousQuestions)).order_by(func.random()).all()[0].format())
+        else:
+            new_question = dict(Question.query.filter(Question.category == quizCategory, ~Question.id.in_(previousQuestions)).order_by(func.random()).all()[0].format())
+        return jsonify({
+        'success': True,
+        'question': new_question,
+        'previousQuestions': previousQuestions
+        })
     """
     @TODO:
     Create error handlers for all expected errors
@@ -99,4 +226,3 @@ def create_app(test_config=None):
     """
 
     return app
-
