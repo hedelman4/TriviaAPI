@@ -256,7 +256,7 @@ def create_app(test_config=None):
     @app.errorhandler(400)
     def unprocessable(error):
         return (
-            jsonify({"success": False, "error": 400, "message": "No more questions"}),
+            jsonify({"success": False, "error": 400, "message": "no more questions"}),
             400,
         )
 
