@@ -6,7 +6,7 @@ from flask_sqlalchemy import SQLAlchemy
 from flaskr import create_app
 from models import setup_db, Question, Category
 
-database_path = 'postgresql://postgres:green21@localhost:5432/trivia_test'
+database_path = 'postgresql://postgres:{}@localhost:5432/trivia_test'.format(os.environ.get('PGPASS'))
 
 class TriviaTestCase(unittest.TestCase):
     """This class represents the trivia test case"""
@@ -60,6 +60,48 @@ class TriviaTestCase(unittest.TestCase):
         data = json.loads(res.data)
 
         self.assertEqual(res.status_code, 404)
+        self.assertEqual(data["success"], False)
+
+    def create_questions(self):
+        res = self.client().post("/questions", json={"question":"Something","answer":"Something","category":"4","difficulty":"1"})
+        data = json.loads(res.data)
+
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(data["success"], True)
+
+    def create_questions_fail(self):
+        res = self.client().post("/questions", json={"question":"Something","answer":"Something","difficulty":"1"})
+        data = json.loads(res.data)
+
+        self.assertEqual(res.status_code, 422)
+        self.assertEqual(data["success"], False)
+
+    def search_questions(self):
+        res = self.client().post("/questions", json={"question":"Something","answer":"Something","category":"4","difficulty":"1","searchTerm":"title"})
+        data = json.loads(res.data)
+
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(data["success"], True)
+
+    def search_questions_fail(self):
+        res = self.client().post("/questions")
+        data = json.loads(res.data)
+
+        self.assertEqual(res.status_code, 422)
+        self.assertEqual(data["success"], False)
+
+    def delete_questions(self):
+        res = self.client().delete("/questions/1")
+        data = json.loads(res.data)
+
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(data["success"], True)
+
+    def delete_questions_fail(self):
+        res = self.client().delete("/questions/1000")
+        data = json.loads(res.data)
+
+        self.assertEqual(res.status_code, 422)
         self.assertEqual(data["success"], False)
 
     def test_quizzes(self):

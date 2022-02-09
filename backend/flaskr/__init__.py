@@ -1,5 +1,5 @@
 import os
-from flask import Flask, request, abort, jsonify
+from flask import Flask, request, abort, jsonify, flash
 from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
 import random
@@ -26,7 +26,7 @@ def create_app(test_config=None):
     """
     @TODO: Set up CORS. Allow '*' for origins. Delete the sample route after completing the TODOs
     """
-    cors = CORS(app, resources={r"/api/*": {"origins": "*"}})
+
     """
     @TODO: Use the after_request decorator to set Access-Control-Allow
     """
@@ -140,7 +140,7 @@ def create_app(test_config=None):
         body = request.get_json()
         new_question = body.get('question',None)
         new_answer = body.get('answer',None)
-        new_category = body.get('category',None)
+        new_category = body.get('category')
         new_difficulty = body.get('difficulty',None)
         search = body.get('searchTerm', None)
         try:
@@ -217,10 +217,16 @@ def create_app(test_config=None):
             body = request.get_json()
             quizCategory = body.get('quiz_category', None)['id']
             previousQuestions = body.get('previous_questions', None)
-            if quizCategory == 'ALL':
-                new_question = dict(Question.query.filter(~Question.id.in_(previousQuestions)).order_by(func.random()).all()[0].format())
+            if quizCategory == 0:
+                if len(Question.query.filter(Question.id.notin_((previousQuestions))).all()) > 0:
+                    new_question = dict(Question.query.filter(~Question.id.in_(previousQuestions)).order_by(func.random()).all()[0].format())
+                else:
+                    new_question = None
             else:
-                new_question = dict(Question.query.filter(Question.category == quizCategory, ~Question.id.in_(previousQuestions)).order_by(func.random()).all()[0].format())
+                if len(Question.query.filter(Question.category == quizCategory, Question.id.notin_((previousQuestions))).all()) > 0:
+                    new_question = dict(Question.query.filter(Question.category == quizCategory, ~Question.id.in_(previousQuestions)).order_by(func.random()).all()[0].format())
+                else:
+                    new_question = None
             return jsonify({
             'success': True,
             'question': new_question,
@@ -245,6 +251,13 @@ def create_app(test_config=None):
         return (
             jsonify({"success": False, "error": 422, "message": "unprocessable"}),
             422,
+        )
+
+    @app.errorhandler(400)
+    def unprocessable(error):
+        return (
+            jsonify({"success": False, "error": 400, "message": "No more questions"}),
+            400,
         )
 
     return app
